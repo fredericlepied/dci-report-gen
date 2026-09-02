@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import os
 
 from github import Github
@@ -17,12 +18,6 @@ def _get_client():
 
 
 def _extract_field(issue, field_name: str):
-    if field_name == "number":
-        return issue.number
-    if field_name == "title":
-        return issue.title
-    if field_name == "state":
-        return issue.state
     if field_name == "author":
         return issue.user.login if issue.user else ""
     if field_name == "created_at":
@@ -47,13 +42,7 @@ class GitHubFetcher:
         results = client.search_issues(source.query)
 
         fields = source.fields or _DEFAULT_FIELDS
-        rows = []
-        count = 0
-        for issue in results:
-            if count >= source.max_results:
-                break
-            row = {f: _extract_field(issue, f) for f in fields}
-            rows.append(row)
-            count += 1
-
-        return rows
+        return [
+            {f: _extract_field(issue, f) for f in fields}
+            for issue in itertools.islice(results, source.max_results)
+        ]

@@ -154,6 +154,9 @@ def load_config(
         t = raw["template"]
         template = TemplateRef(type=t["type"], params=t.get("params", {}))
 
+    template_sections: list[SectionConfig] = []
+    template_data: dict[str, SourceConfig] = {}
+
     if template:
         from dci_report_gen.templates.registry import expand_template
 
@@ -169,17 +172,14 @@ def load_config(
         if layout is None and "layout" in tmpl_report:
             layout = tmpl_report["layout"]
 
-        template_sections = []
         if "sections" in tmpl_raw:
             template_sections = _parse_sections(tmpl_raw["sections"])
 
-        template_data = {}
         if "data" in tmpl_raw:
-            for name, src_raw in tmpl_raw["data"].items():
-                template_data[name] = _parse_source(src_raw)
-    else:
-        template_sections = []
-        template_data = {}
+            template_data = {
+                name: _parse_source(src_raw)
+                for name, src_raw in tmpl_raw["data"].items()
+            }
 
     sections = []
     if "sections" in raw:

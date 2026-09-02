@@ -6,19 +6,10 @@ from datetime import datetime
 def format_value(value, fmt: str | None = None):
     if value is None:
         return ""
-
-    if fmt is None:
-        return str(value)
-
     if fmt == "date":
         return _format_date(value)
     if fmt == "duration":
         return _format_duration(value)
-    if fmt == "jira_link":
-        return str(value)
-    if fmt == "github_pr_link":
-        return str(value)
-
     return str(value)
 
 
@@ -37,13 +28,11 @@ def format_value_md(value, fmt: str | None = None):
 
 def _format_date(value) -> str:
     if isinstance(value, str):
-        for pattern in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
-            try:
-                dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-                return dt.strftime("%Y-%m-%d %H:%M")
-            except ValueError:
-                continue
-        return value
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return dt.strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            return value
     return str(value)
 
 

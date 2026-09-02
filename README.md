@@ -5,18 +5,20 @@ A YAML-driven report generation engine for [DCI](https://docs.distributed-ci.io/
 ## Installation
 
 ```bash
-pip install .
+pip install -e ".[dev]"
 ```
 
-Or in development mode:
+Or with [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
-pip install -e ".[dev]"
+uv sync --extra dev
 ```
 
 ### System dependencies (for PDF output)
 
-WeasyPrint requires system libraries for PDF rendering. On Fedora/RHEL:
+WeasyPrint requires system libraries for PDF rendering.
+
+On Fedora/RHEL:
 
 ```bash
 dnf install pango cairo gdk-pixbuf2
@@ -26,6 +28,18 @@ On Debian/Ubuntu:
 
 ```bash
 apt install libpango-1.0-0 libcairo2 libgdk-pixbuf-2.0-0
+```
+
+On macOS (Homebrew):
+
+```bash
+brew install pango cairo glib
+```
+
+Then add to your `.env` so WeasyPrint can find them:
+
+```env
+DYLD_LIBRARY_PATH=/opt/homebrew/lib
 ```
 
 ## Quick start
@@ -40,8 +54,14 @@ dci-report-gen config.yaml -o report.pdf
 # Override variables from the command line
 dci-report-gen config.yaml -o report.md --var date_start=2025-06-01
 
-# Use a predefined template
+# List predefined templates
 dci-report-gen --list-templates
+```
+
+With uv:
+
+```bash
+uv run --extra dev dci-report-gen config.yaml -o report.md
 ```
 
 ## Authentication
@@ -60,6 +80,9 @@ JIRA_API_TOKEN=<your-jira-token>
 
 # GitHub (required for GitHub data)
 GITHUB_TOKEN=<your-github-token>
+
+# macOS only — WeasyPrint PDF support
+DYLD_LIBRARY_PATH=/opt/homebrew/lib
 ```
 
 Only the credentials for data sources used in your config are required.
@@ -99,29 +122,32 @@ Each entry in the `data` block defines a named data source.
 
 **DCI** (`type: dci`) — searches DCI jobs via the analytics API:
 
-| Field   | Description                          | Default         |
-|---------|--------------------------------------|-----------------|
-| `query` | DCI search query (parenthesized DSL) | required        |
-| `fields`| List of fields to return             | all             |
-| `limit` | Max number of results                | `100`           |
-| `sort`  | Sort field (prefix `-` for desc)     | `-created_at`   |
-| `aggs`  | Elasticsearch aggregation object     | none            |
+| Field             | Description                                       | Default       |
+|-------------------|---------------------------------------------------|---------------|
+| `query`           | DCI search query (parenthesized DSL)              | required      |
+| `fields`          | List of fields to return                          | all           |
+| `limit`           | Max number of results                             | `100`         |
+| `sort`            | Sort field (prefix `-` for desc)                  | `-created_at` |
+| `aggs`            | Elasticsearch aggregation object                  | none          |
+| `include_results` | Include test result counts (`results`, `tests`)   | `false`       |
+| `include_files`   | Download job file contents                        | `false`       |
+| `file_patterns`   | List of regex patterns to filter files            | all           |
 
 **Jira** (`type: jira`) — runs a JQL query:
 
-| Field        | Description               | Default |
-|--------------|---------------------------|---------|
-| `jql`        | JQL query string          | required|
-| `max_results`| Max number of results     | `50`    |
-| `fields`     | List of fields to extract | `key`, `summary`, `status`, `assignee` |
+| Field         | Description                  | Default                                    |
+|---------------|------------------------------|--------------------------------------------|
+| `jql`         | JQL query string             | required                                   |
+| `max_results` | Max number of results        | `50`                                       |
+| `fields`      | List of fields to extract    | `key`, `summary`, `status`, `assignee`     |
 
 **GitHub** (`type: github`) — searches issues and pull requests:
 
-| Field        | Description                      | Default |
-|--------------|----------------------------------|---------|
-| `query`      | GitHub search query              | required|
-| `max_results`| Max number of results            | `50`    |
-| `fields`     | List of fields to extract        | `number`, `title`, `state`, `author` |
+| Field         | Description               | Default                                    |
+|---------------|---------------------------|--------------------------------------------|
+| `query`       | GitHub search query       | required                                   |
+| `max_results` | Max number of results     | `50`                                       |
+| `fields`      | List of fields to extract | `number`, `title`, `state`, `author`       |
 
 ### Variables
 
@@ -130,6 +156,10 @@ The `vars` block defines variables substituted into data source queries using `{
 ## Jinja2 layout templates
 
 The `layout` field in the config points to a Jinja2 template file (`.md.j2`). The template receives all fetched data sources as variables, plus `title`, `author`, `date`, and any `vars`.
+
+Templates are searched in this order:
+1. The directory containing the YAML config file
+2. The built-in templates directory (`src/dci_report_gen/templates/`)
 
 ### Example template (`weekly-report.md.j2`)
 
@@ -146,42 +176,39 @@ The `layout` field in the config points to a Jinja2 template file (`.md.j2`). Th
 {% for job in daily_jobs %}
 | {{ job.name }} | {{ job.status }} | {{ job.created_at | date }} | {{ job.duration | duration }} | [View](https://www.distributed-ci.io/jobs/{{ job.id }}) |
 {% endfor %}
-
-{% if open_tickets %}
-## Open Jira Tickets
-
-{% for t in open_tickets %}
-- [{{ t.key }}](https://redhat.atlassian.net/browse/{{ t.key }}) — {{ t.summary }} ({{ t.status }})
-{% endfor %}
-{% endif %}
 ```
 
 ### Custom filters
 
-The following Jinja2 filters are available in templates:
+| Filter               | Description                                               | Example                                    |
+|----------------------|-----------------------------------------------------------|--------------------------------------------|
+| `duration`           | Seconds → `Xh Ym Zs`                                     | `{{ job.duration \| duration }}`           |
+| `compact_duration`   | Seconds → `1h09m` or `48m40s` (compact, no seconds for ≥1h) | `{{ job.duration \| compact_duration }}` |
+| `human_duration`     | Seconds → `Xm YYs` (or long form)                        | `{{ job.duration \| human_duration }}`     |
+| `date`               | ISO timestamp → `YYYY-MM-DD HH:MM`                        | `{{ job.created_at \| date }}`             |
+| `jira_link`          | Jira key → Markdown link                                  | `{{ key \| jira_link }}`                   |
+| `github_link`        | PR number → Markdown link                                 | `{{ pr \| github_link(repo) }}`            |
+| `dci_link`           | DCI job ID → short linked ID                              | `{{ job.id \| dci_link }}`                 |
+| `short_id`           | Truncate a UUID to N chars (default 8)                    | `{{ job.id \| short_id }}`                 |
+| `status_emoji`       | DCI/test status → emoji (✅ ❌ 🔄)                         | `{{ job.status \| status_emoji }}`         |
+| `find_testcase`      | Find a testcase by name in a tests list                   | `{{ job.tests \| find_testcase('hwlat') }}`|
+| `find_file`          | Find file content by regex pattern                        | `{{ job.files \| find_file('timing') }}`   |
+| `regex_extract`      | Extract first capture group from text                     | `{{ text \| regex_extract('Version: (.+)')}}` |
+| `yaml_path`          | Parse YAML text and extract a dotted key path             | `{{ text \| yaml_path('spec.version') }}`  |
+| `github_run_link`    | Find GitHub Actions run link from job tags                | `{{ job.tags \| github_run_link(repo) }}`  |
 
-| Filter          | Description                                | Example                          |
-|-----------------|--------------------------------------------|----------------------------------|
-| `duration`      | Convert seconds to `Xh Ym Zs`             | `{{ job.duration \| duration }}` |
-| `date`          | Format ISO timestamp as `YYYY-MM-DD HH:MM`| `{{ job.created_at \| date }}`   |
-| `jira_link`     | Render a Jira ticket key as a Markdown link| `{{ key \| jira_link }}`         |
-| `github_link`   | Render a PR number as a Markdown link      | `{{ pr \| github_link }}`        |
+## Examples
 
-### Template search paths
+### Weekly OCP daily jobs report
 
-The engine searches for Jinja2 templates in this order:
-1. The directory containing the YAML config file
-2. The built-in templates directory (`src/dci_report_gen/templates/`)
+Fetches DCI jobs tagged `daily` for OCP components:
 
-This means you can place `.md.j2` files next to your config files in the lab config repo.
+```bash
+dci-report-gen examples/weekly-report.yaml -o report.md
+dci-report-gen examples/weekly-report.yaml -o report.pdf
+```
 
-## Predefined templates
-
-Templates are reusable YAML report definitions stored in the package. They declare parameters with defaults and bundle a Jinja2 layout.
-
-### Using a template
-
-Create a minimal config that references a template by name:
+### Using a predefined template
 
 ```yaml
 template:
@@ -191,12 +218,29 @@ template:
     limit: 10
 ```
 
-### Writing a template
+```bash
+dci-report-gen examples/use-template.yaml -o report.md
+```
 
-Templates are YAML files placed in `src/dci_report_gen/templates/` alongside their `.md.j2` layout file:
+## Predefined templates
+
+| Name                    | Description                                      |
+|-------------------------|--------------------------------------------------|
+| `daily-status`          | Daily CI job status report                       |
+| `weekly-testing-summary`| Weekly testing summary for SLCM/RAN CI testing  |
+
+List available templates:
+
+```bash
+dci-report-gen --list-templates
+```
+
+### Writing a custom template
+
+Place a YAML file in `src/dci_report_gen/templates/` alongside its `.md.j2` layout:
 
 ```yaml
-description: "Daily CI job status report"
+description: "My custom report"
 
 params:
   date_start:
@@ -205,37 +249,26 @@ params:
     default: 50
 
 report:
-  title: "Daily CI Status — {{ date_start }}"
-  author: "DCI Team"
-  layout: daily-status.md.j2
+  title: "My Report — {{ date_start }}"
+  layout: my-report.md.j2
 
 data:
-  daily_jobs:
+  jobs:
     type: dci
     query: "..."
     limit: "{{limit}}"
 ```
 
-List available templates with:
-
-```bash
-dci-report-gen --list-templates
-```
-
 ## Output formats
 
-The output format is determined by the file extension:
-
-- `.md` — Markdown rendered by Jinja2
-- `.pdf` — Markdown → HTML → PDF via WeasyPrint with CSS styling
-
-### Customizing PDF styling
-
-The PDF uses a default CSS stylesheet. You can override it by placing a `custom.css` file and adjusting the rendering pipeline (future feature).
+| Extension | Output                                              |
+|-----------|-----------------------------------------------------|
+| `.md`     | Markdown rendered by Jinja2                         |
+| `.pdf`    | Markdown → HTML → PDF via WeasyPrint + CSS styling  |
 
 ## Legacy sections mode
 
-For simple reports that don't need a Jinja2 template, you can use the original `sections` format:
+For simple reports without a Jinja2 template, use the `sections` format:
 
 ```yaml
 report:
@@ -256,7 +289,7 @@ sections:
           field: "status"
 ```
 
-This mode is used when no `layout` field is present in the config.
+Supported render styles: `table`, `list`, `summary`, `count`.
 
 ## Project structure
 
@@ -270,21 +303,30 @@ src/dci_report_gen/
 │   ├── jira.py         # Jira JQL queries
 │   └── github.py       # GitHub issue/PR search
 ├── renderers/
-│   ├── jinja.py        # Jinja2 + WeasyPrint rendering
+│   ├── jinja.py        # Jinja2 rendering + custom filters
 │   ├── markdown.py     # Markdown renderer (legacy sections mode)
-│   ├── formatters.py   # Value formatting (date, duration, links)
+│   ├── pdf.py          # PDF renderer (legacy sections mode)
+│   ├── formatters.py   # Shared value formatting (date, duration)
 │   └── default.css     # PDF stylesheet
 └── templates/
-    ├── registry.py     # Template discovery and expansion
+    ├── registry.py               # Template discovery and expansion
     ├── daily-status.yaml
-    └── daily-status.md.j2
+    ├── daily-status.md.j2
+    ├── weekly-testing-summary.yaml
+    └── weekly-testing-summary.md.j2
+
+examples/
+├── weekly-report.yaml            # OCP daily jobs example
+├── weekly-report.md.j2
+└── use-template.yaml             # Predefined template usage
 ```
 
 ## Development
 
 ```bash
-pip install -e ".[dev]"
-pytest
+uv sync --extra dev
+uv run --extra dev pytest
+uv run --extra dev ruff check src/ tests/
 ```
 
 ## License

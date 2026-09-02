@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+import re
 from pathlib import Path
 
 import yaml
@@ -48,8 +48,6 @@ def expand_template(name: str, params: dict) -> tuple[dict, dict]:
     for key, value in params.items():
         if key not in template_vars:
             template_vars[key] = str(value)
-
-    import re
 
     def replacer(match):
         key = match.group(1)

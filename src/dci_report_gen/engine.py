@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -32,6 +31,8 @@ class ReportEngine:
         return self._fetchers[source_type]
 
     def generate(self, config: ReportConfig, output_path: str, config_path: str | None = None) -> None:
+        if config.layout and not config.data:
+            raise ValueError("Config has 'layout' but no 'data' block; Jinja2 mode requires both.")
         if config.layout and config.data:
             self._generate_jinja(config, output_path, config_path)
         else:

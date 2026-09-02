@@ -24,14 +24,6 @@ _FIELD_MAP = {
 _DEFAULT_FIELDS = ["key", "summary", "status", "assignee"]
 
 
-def _get_client():
-    url = os.environ.get("JIRA_URL", "https://redhat.atlassian.net")
-    token = os.environ.get("JIRA_API_TOKEN")
-    if not token:
-        raise RuntimeError("JIRA_API_TOKEN environment variable is required")
-    return JIRA(server=url, token_auth=token)
-
-
 def _extract_field(issue, field_name: str) -> str:
     if field_name in _FIELD_MAP:
         return _FIELD_MAP[field_name](issue)
@@ -42,11 +34,23 @@ def _extract_field(issue, field_name: str) -> str:
 
 
 class JiraFetcher:
+    def __init__(self):
+        self._client = None
+
+    def _get_client(self):
+        if self._client is None:
+            url = os.environ.get("JIRA_URL", "https://redhat.atlassian.net")
+            token = os.environ.get("JIRA_API_TOKEN")
+            if not token:
+                raise RuntimeError("JIRA_API_TOKEN environment variable is required")
+            self._client = JIRA(server=url, token_auth=token)
+        return self._client
+
     def fetch(self, source: SourceConfig) -> list[dict]:
         if not source.jql:
             return []
 
-        client = _get_client()
+        client = self._get_client()
         issues = client.search_issues(
             source.jql,
             maxResults=source.max_results,

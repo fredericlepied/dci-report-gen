@@ -6,7 +6,6 @@ from pathlib import Path
 import markdown as md
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML
 
 from dci_report_gen.renderers.formatters import _format_date, _format_duration
 
@@ -29,6 +28,7 @@ def _build_env(search_paths: list[str | Path]) -> Environment:
     env.filters["dci_link"] = _filter_dci_link
     env.filters["short_id"] = _filter_short_id
     env.filters["human_duration"] = _filter_human_duration
+    env.filters["compact_duration"] = _filter_compact_duration
     env.filters["find_testcase"] = _filter_find_testcase
     env.filters["github_run_link"] = _filter_github_run_link
     env.filters["find_file"] = _filter_find_file
@@ -72,9 +72,6 @@ _STATUS_EMOJI = {
     "new": "\U0001f504",
     "pre-run": "\U0001f504",
     "post-run": "\U0001f504",
-    "pass": "✅",
-    "Pass": "✅",
-    "Fail": "❌",
 }
 
 
@@ -93,6 +90,18 @@ def _filter_short_id(value, length=8):
     if not value:
         return ""
     return str(value)[:length]
+
+
+def _filter_compact_duration(seconds):
+    try:
+        s = int(float(seconds))
+    except (ValueError, TypeError):
+        return str(seconds)
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    if h:
+        return f"{h}h{m:02d}m"
+    return f"{m}m{sec:02d}s"
 
 
 def _filter_human_duration(seconds, style="short"):
@@ -141,8 +150,9 @@ def _filter_regex_extract(text, pattern):
     if not text:
         return None
     m = re.search(pattern, str(text))
-    if m and m.groups():
-        return m.group(1).strip()
+    if m:
+        g = m.group(1)
+        return g.strip() if g is not None else None
     return None
 
 
@@ -195,5 +205,7 @@ def markdown_to_pdf(
 {html_body}
 </body>
 </html>"""
+
+    from weasyprint import HTML
 
     HTML(string=html_doc).write_pdf(output_path)

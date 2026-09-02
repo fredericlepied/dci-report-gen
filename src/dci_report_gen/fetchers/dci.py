@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 
 from dciclient.v1.api import context as dci_context
@@ -16,12 +17,12 @@ def _get_context():
 def _extract_field(obj: dict, dotted_key: str):
     parts = dotted_key.split(".")
     current = obj
-    for part in parts:
+    for i, part in enumerate(parts):
         if current is None:
             return None
         if isinstance(current, list):
             return ", ".join(
-                str(_extract_field(item, ".".join([part] + parts[parts.index(part) + 1 :])))
+                str(_extract_field(item, ".".join(parts[i:])))
                 for item in current
                 if item is not None
             )
@@ -48,11 +49,15 @@ class DCIFetcher:
 
     def _search_jobs(self, ctx, source: SourceConfig) -> list[dict]:
         fields = list(source.fields) if source.fields else None
-        if source.include_results and fields:
+        if source.include_results:
+            if fields is None:
+                fields = []
             for f in ("tests", "results", "id"):
                 if f not in fields:
                     fields.append(f)
-        if source.include_files and fields:
+        if source.include_files:
+            if fields is None:
+                fields = []
             for f in ("files.id", "files.name", "id"):
                 if f not in fields:
                     fields.append(f)
@@ -86,8 +91,6 @@ class DCIFetcher:
         return [_flatten_row(src, source.fields) for src in sources]
 
     def _download_files(self, ctx, jobs: list[dict], patterns: list[str] | None) -> None:
-        import re as _re
-
         for job in jobs:
             raw_files = job.get("files", [])
             enriched = []
@@ -96,7 +99,7 @@ class DCIFetcher:
                 file_name = f.get("name", "")
                 if not file_id:
                     continue
-                if patterns and not any(_re.search(p, file_name) for p in patterns):
+                if patterns and not any(re.search(p, file_name) for p in patterns):
                     continue
                 print(f"    Downloading {file_name}...", file=sys.stderr)
                 resp = dci_file.content(ctx, id=file_id)
@@ -106,6 +109,10 @@ class DCIFetcher:
                     except UnicodeDecodeError:
                         content = ""
                 else:
+                    print(
+                        f"    Warning: failed to download {file_name} ({resp.status_code})",
+                        file=sys.stderr,
+                    )
                     content = ""
                 enriched.append({"name": file_name, "id": file_id, "content": content})
             job["files"] = enriched

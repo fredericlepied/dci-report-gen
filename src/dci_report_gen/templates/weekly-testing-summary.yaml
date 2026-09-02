@@ -16,7 +16,7 @@ report:
 data:
   ibi_jobs:
     type: dci
-    query: "((name='op-deploy-cloudran-site-ibi') and (created_at>='{{date_start}}'))"
+    query: "((name='op-deploy-cloudran-site-ibi') and (created_at>='{{date_start}}') and (created_at<='{{date_end}}T23:59:59'))"
     fields: ["id", "name", "status", "created_at", "duration", "remoteci", "components", "tags", "configuration", "files.id", "files.name"]
     include_results: true
     include_files: true
@@ -26,7 +26,7 @@ data:
 
   ibu_jobs:
     type: dci
-    query: "(((tags in ['ibu']) and (tags in ['stage:upgrade'])) and (created_at>='{{date_start}}'))"
+    query: "(((tags in ['ibu']) and (tags in ['stage:upgrade'])) and (created_at>='{{date_start}}') and (created_at<='{{date_end}}T23:59:59'))"
     fields: ["id", "name", "status", "created_at", "duration", "remoteci", "components", "tags", "configuration", "files.id", "files.name"]
     include_results: true
     include_files: true
@@ -36,7 +36,7 @@ data:
 
   latency_jobs:
     type: dci
-    query: "((tags in ['latency']) and (created_at>='{{date_start}}'))"
+    query: "((tags in ['latency']) and (created_at>='{{date_start}}') and (created_at<='{{date_end}}T23:59:59'))"
     fields: ["id", "name", "status", "created_at", "duration", "remoteci", "components", "tags", "configuration", "files.id", "files.name"]
     include_results: true
     include_files: true
@@ -46,7 +46,7 @@ data:
 
   slcm_jobs:
     type: dci
-    query: "(((tags in ['weekly-caas-slcm']) and (components.type='ocp')) and (created_at>='{{date_start}}'))"
+    query: "(((tags in ['weekly-caas-slcm']) and (components.type='ocp')) and (created_at>='{{date_start}}') and (created_at<='{{date_end}}T23:59:59'))"
     fields: ["id", "name", "status", "created_at", "duration", "remoteci", "components", "tags", "configuration"]
     include_results: true
     limit: 50
@@ -54,7 +54,7 @@ data:
 
   eavs_jobs:
     type: dci
-    query: "(((tags in ['weekly-caas-eavs']) and (components.type='ocp')) and (created_at>='{{date_start}}'))"
+    query: "(((tags in ['weekly-caas-eavs']) and (components.type='ocp')) and (created_at>='{{date_start}}') and (created_at<='{{date_end}}T23:59:59'))"
     fields: ["id", "name", "status", "created_at", "duration", "remoteci", "components", "tags", "configuration"]
     include_results: true
     limit: 50

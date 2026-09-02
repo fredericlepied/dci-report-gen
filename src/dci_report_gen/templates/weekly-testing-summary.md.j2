@@ -8,14 +8,6 @@
 
 ---
 
-{% macro dci_job_link(job, tab="tests") -%}
-[{{ job.id | short_id }}](https://www.distributed-ci.io/jobs/{{ job.id }}/{{ tab }})
-{%- endmacro %}
-
-{% macro gh_run_link(job) -%}
-{{ job.tags | github_run_link(github_repo) }}
-{%- endmacro %}
-
 {% macro ocp_version(job) -%}
 {% if job.components is mapping -%}
 {{ job.components.version | default('—', true) }}
@@ -85,7 +77,7 @@
 {% set policy_dur = timing_content | regex_extract('Policy Reconciliation Duration\\s*:\\s*(.+)') if timing_content else None %}
 | Date | Deployment Duration | Policy Reconciliation | DCI |
 |------|--------------------|-----------------------|-----|
-| {{ job.created_at | date }} | {{ deploy_dur | default('—', true) }} | {{ policy_dur | default('—', true) }} | {{ dci_job_link(job, 'files') }} |
+| {{ job.created_at | date }} | {{ deploy_dur | default('—', true) }} | {{ policy_dur | default('—', true) }} | {{ job.id | dci_link('files') }} |
 
 {% endfor %}
 {% for job in ibu_jobs %}
@@ -110,7 +102,7 @@ Target version: {{ target_version }}
 
 | Date | Reboot | Total IBU | IBU + Validations | DCI |
 |------|--------|-----------|-------------------|-----|
-| {{ job.created_at | date }} | {{ ibu_reboot | default('—', true) }} | {{ ibu_total | default('—', true) }} | {{ ibu_total_tests | default('—', true) }} | {{ dci_job_link(job) }} |
+| {{ job.created_at | date }} | {{ ibu_reboot | default('—', true) }} | {{ ibu_total | default('—', true) }} | {{ ibu_total_tests | default('—', true) }} | {{ job.id | dci_link }} |
 
 {% set ibu_talm = ibu_timing | regex_extract('TALM Overhead\\s*:\\s*(\\d+m\\s+\\d+s)') if ibu_timing else None %}
 {% set ibu_prepivot = ibu_timing | regex_extract('PrePivot\\s*:\\s*(\\d+m\\s+\\d+s)') if ibu_timing else None %}
@@ -137,7 +129,7 @@ Target version: {{ target_version }}
 
 {% for site, jobs in latency_jobs | groupby('configuration') %}
 {% set job = jobs | selectattr('status', 'equalto', 'success') | first | default(jobs[0]) %}
-### {{ site }} — {{ hw_desc(site) }} — {{ ocp_version(job) }} — Duration: ~{{ (job.duration / 3600) | round | int }}h
+### {{ site }} — {{ hw_desc(site) }} — {{ ocp_version(job) }} — Duration: {{ '~' ~ ((job.duration / 3600) | round | int) ~ 'h' if job.duration else '—' }}
 
 {% set mc_content = job.files | find_file('microcode_') %}
 {% set microcode = mc_content | regex_extract('microcode\\s*:\\s*(\\S+)') if mc_content else None %}
@@ -162,12 +154,12 @@ Microcode: `{{ microcode }}`
 {% endif %}
 {% endfor %}
 
-Pipeline: {{ gh_run_link(job) }}
+Pipeline: {{ job.tags | github_run_link(github_repo) }}
 
-DCI: {{ dci_job_link(job) }}
+DCI: {{ job.id | dci_link }}
 
 {% for other_job in jobs if other_job.id != job.id and other_job.status in ['new', 'pre-run', 'running', 'post-run'] %}
-> 🔄 A new latency run ({{ gh_run_link(other_job) }}, OCP {{ ocp_version(other_job) }}) started on {{ other_job.created_at | date }} and is still in progress.
+> 🔄 A new latency run ({{ other_job.tags | github_run_link(github_repo) }}, OCP {{ ocp_version(other_job) }}) started on {{ other_job.created_at | date }} and is still in progress.
 
 {% endfor %}
 {% endfor %}
@@ -179,12 +171,12 @@ DCI: {{ dci_job_link(job) }}
 {% for site, jobs in slcm_jobs | groupby('configuration') %}
 ### {{ ocp_version(jobs[0]) }} — {{ site }} ({{ hw_desc(site) }})
 
-Pipeline: {{ gh_run_link(jobs[0]) }} | Started: {{ jobs[0].created_at | date }}
+Pipeline: {{ jobs[0].tags | github_run_link(github_repo) }} | Started: {{ jobs[0].created_at | date }}
 
 | Job | Status | DCI |
 |-----|--------|-----|
 {% for job in jobs %}
-| {{ job.name }} | {{ job.status | status_emoji }} {{ job.status | title }} | {{ dci_job_link(job) }} |
+| {{ job.name }} | {{ job.status | status_emoji }} {{ job.status | title }} | {{ job.id | dci_link }} |
 {% endfor %}
 
 {% set failures = jobs | selectattr('status', 'in', ['failure', 'error']) | list %}
@@ -214,13 +206,13 @@ Pipeline: {{ gh_run_link(jobs[0]) }} | Started: {{ jobs[0].created_at | date }}
 {% for test_file in job.tests | default([]) %}
 {% for suite in test_file.testsuites | default([]) %}
 {% for tc in suite.testcases | default([]) if tc.action != 'skipped' %}
-| {{ tc.name }} | {{ tc.action | status_emoji }} {{ tc.action | title }} | {{ dci_job_link(job) }} |
+| {{ tc.name }} | {{ tc.action | status_emoji }} {{ tc.action | title }} | {{ job.id | dci_link }} |
 {% endfor %}
 {% endfor %}
 {% endfor %}
 {% endfor %}
 
-Pipeline: {{ gh_run_link(jobs[0]) }}
+Pipeline: {{ jobs[0].tags | github_run_link(github_repo) }}
 
 {% set ns = namespace(failures=[]) %}
 {% for job in jobs %}
