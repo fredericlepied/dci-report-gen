@@ -33,6 +33,7 @@ class SourceConfig:
     include_results: bool = False
     include_files: bool = False
     file_patterns: list[str] | None = None
+    params: dict | None = None
 
 
 @dataclass
@@ -68,7 +69,7 @@ def _substitute_vars(text: str, vars: dict[str, str]) -> str:
             raise ValueError(f"Undefined variable: {{{{{key}}}}}")
         return vars[key]
 
-    return re.sub(r"\{\{(\w+)\}\}", replacer, text)
+    return re.sub(r"\{\{\s*(\w+)\s*\}\}", replacer, text)
 
 
 def _apply_vars_to_source(source: SourceConfig, vars: dict[str, str]) -> None:
@@ -114,6 +115,7 @@ def _parse_source(raw: dict) -> SourceConfig:
         include_results=bool(raw.get("include_results", False)),
         include_files=bool(raw.get("include_files", False)),
         file_patterns=raw.get("file_patterns"),
+        params=raw.get("params"),
     )
 
 

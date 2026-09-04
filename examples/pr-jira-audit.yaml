@@ -1,0 +1,15 @@
+report:
+  title: "PR ↔ Jira Traceability Audit"
+  date: auto
+  layout: pr-jira-audit.md.j2
+
+vars:
+  github_username: ""  # required: --var github_username=fredericlepied
+
+data:
+  audit:
+    type: pr_jira_audit
+    query: "is:pr is:open author:{{ github_username }}"
+    max_results: 200
+    params:
+      jira_projects: "CILAB,CNF"

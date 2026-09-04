@@ -76,7 +76,8 @@ DCI_API_SECRET=<your-api-secret>
 
 # Jira (required for Jira data)
 JIRA_URL=https://redhat.atlassian.net
-JIRA_API_TOKEN=<your-jira-token>
+JIRA_TOKEN=<your-jira-token>
+JIRA_EMAIL=<your-email>          # required for Atlassian Cloud (uses basic_auth)
 
 # GitHub (required for GitHub data)
 GITHUB_TOKEN=<your-github-token>
@@ -149,6 +150,16 @@ Each entry in the `data` block defines a named data source.
 | `max_results` | Max number of results     | `50`                                       |
 | `fields`      | List of fields to extract | `number`, `title`, `state`, `author`       |
 
+**PR ↔ Jira Audit** (`type: pr_jira_audit`) — cross-references GitHub PRs with Jira tickets:
+
+| Field         | Description                                           | Default  |
+|---------------|-------------------------------------------------------|----------|
+| `query`       | GitHub search query for PRs                           | required |
+| `max_results` | Max number of PRs to fetch                            | `200`    |
+| `params.jira_projects` | Comma-separated Jira project keys to search  | required |
+
+For each PR, the fetcher searches Jira for tickets referencing the PR URL (in description, comments, or web links) using exact-phrase JQL matching. Returns a list of dicts with `number`, `title`, `url`, `repo`, `author`, `created_at`, `linked` (bool), and `jira_keys` (list).
+
 ### Variables
 
 The `vars` block defines variables substituted into data source queries using `{{var_name}}` syntax. Variables can be overridden from the CLI with `--var KEY=VALUE`.
@@ -206,6 +217,14 @@ Fetches DCI jobs tagged `daily` for OCP components:
 ```bash
 dci-report-gen examples/weekly-report.yaml -o report.md
 dci-report-gen examples/weekly-report.yaml -o report.pdf
+```
+
+### PR ↔ Jira traceability audit
+
+Finds all open PRs for a given GitHub user and checks which ones have a corresponding Jira ticket:
+
+```bash
+dci-report-gen examples/pr-jira-audit.yaml -o audit.md --var github_username=fredericlepied
 ```
 
 ### Using a predefined template
@@ -301,7 +320,8 @@ src/dci_report_gen/
 ├── fetchers/
 │   ├── dci.py          # DCI job search (dciclient)
 │   ├── jira.py         # Jira JQL queries
-│   └── github.py       # GitHub issue/PR search
+│   ├── github.py       # GitHub issue/PR search
+│   └── pr_jira_audit.py # PR ↔ Jira cross-reference audit
 ├── renderers/
 │   ├── jinja.py        # Jinja2 rendering + custom filters
 │   ├── markdown.py     # Markdown renderer (legacy sections mode)
@@ -318,6 +338,8 @@ src/dci_report_gen/
 examples/
 ├── weekly-report.yaml            # OCP daily jobs example
 ├── weekly-report.md.j2
+├── pr-jira-audit.yaml            # PR ↔ Jira traceability audit
+├── pr-jira-audit.md.j2
 └── use-template.yaml             # Predefined template usage
 ```
 
