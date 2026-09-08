@@ -40,10 +40,16 @@ class JiraFetcher:
     def _get_client(self):
         if self._client is None:
             url = os.environ.get("JIRA_URL", "https://redhat.atlassian.net")
-            token = os.environ.get("JIRA_API_TOKEN")
+            token = os.environ.get("JIRA_TOKEN") or os.environ.get("JIRA_API_TOKEN")
+            email = os.environ.get("JIRA_EMAIL")
             if not token:
-                raise RuntimeError("JIRA_API_TOKEN environment variable is required")
-            self._client = JIRA(server=url, token_auth=token)
+                raise RuntimeError(
+                    "JIRA_TOKEN or JIRA_API_TOKEN environment variable is required"
+                )
+            if email:
+                self._client = JIRA(server=url, basic_auth=(email, token))
+            else:
+                self._client = JIRA(server=url, token_auth=token)
         return self._client
 
     def fetch(self, source: SourceConfig) -> list[dict]:

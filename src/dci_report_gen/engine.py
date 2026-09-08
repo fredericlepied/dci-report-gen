@@ -26,6 +26,10 @@ class ReportEngine:
                 from dci_report_gen.fetchers.github import GitHubFetcher
 
                 self._fetchers[source_type] = GitHubFetcher()
+            elif source_type == "pr_jira_audit":
+                from dci_report_gen.fetchers.pr_jira_audit import PrJiraAuditFetcher
+
+                self._fetchers[source_type] = PrJiraAuditFetcher()
             else:
                 raise ValueError(f"Unknown source type: {source_type}")
         return self._fetchers[source_type]

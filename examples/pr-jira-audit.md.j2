@@ -1,0 +1,31 @@
+# {{ title }}
+
+**Date:** {{ date }}
+
+{% set linked_prs = audit | selectattr("linked") | list %}
+{% set orphan_prs = audit | rejectattr("linked") | list %}
+
+## Summary
+
+| Metric | Value |
+| ------ | ----- |
+| Author | {{ audit[0].author if audit else "N/A" }} |
+| Total PRs | {{ audit | length }} |
+| Linked to Jira ✅ | {{ linked_prs | length }} ({{ "%.0f" | format(linked_prs | length / audit | length * 100) }}%) |
+| Orphans ⚠️ | {{ orphan_prs | length }} |
+
+## ✅ Linked PRs
+
+| PR | Repo | Jira |
+| -- | ---- | ---- |
+{% for pr in linked_prs %}
+| [#{{ pr.number }}]({{ pr.url }}) {{ pr.title }} | {{ pr.repo }} | {% for key in pr.jira_keys %}[{{ key }}](https://redhat.atlassian.net/browse/{{ key }}){% if not loop.last %}, {% endif %}{% endfor %} |
+{% endfor %}
+
+## ⚠️ Orphan PRs (no Jira ticket)
+
+| PR | Repo | Created |
+| -- | ---- | ------- |
+{% for pr in orphan_prs %}
+| [#{{ pr.number }}]({{ pr.url }}) {{ pr.title }} | {{ pr.repo }} | {{ pr.created_at | date }} |
+{% endfor %}
