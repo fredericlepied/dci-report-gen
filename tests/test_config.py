@@ -1,6 +1,14 @@
 import os
+import re
+from datetime import date, timedelta
+from unittest.mock import patch
 
-from dci_report_gen.config import load_config
+from dci_report_gen.config import (
+    _resolve_date_expr,
+    _resolve_vars,
+    _substitute_vars_expr,
+    load_config,
+)
 
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -77,3 +85,95 @@ def test_include_files_config():
     assert config.data["jobs_with_files"].file_patterns == ["ibi_cluster_timing", "microcode_"]
     assert config.data["jobs"].include_files is False
     assert config.data["jobs"].file_patterns is None
+
+
+# ── Date expression tests ──────────────────────────────────────────
+
+
+class TestResolveDateExpr:
+    @patch("dci_report_gen.config.date")
+    def test_today(self, mock_date):
+        mock_date.today.return_value = date(2026, 9, 9)
+        mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
+        assert _resolve_date_expr("{today}") == "2026-09-09"
+
+    @patch("dci_report_gen.config.date")
+    def test_today_minus_days(self, mock_date):
+        mock_date.today.return_value = date(2026, 9, 9)
+        mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
+        assert _resolve_date_expr("{today-7d}") == "2026-09-02"
+
+    @patch("dci_report_gen.config.date")
+    def test_today_plus_days(self, mock_date):
+        mock_date.today.return_value = date(2026, 9, 9)
+        mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
+        assert _resolve_date_expr("{today+3d}") == "2026-09-12"
+
+    def test_no_expression(self):
+        assert _resolve_date_expr("plain text") == "plain text"
+        assert _resolve_date_expr("2026-01-01") == "2026-01-01"
+
+    @patch("dci_report_gen.config.date")
+    def test_embedded_in_text(self, mock_date):
+        mock_date.today.return_value = date(2026, 9, 9)
+        mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
+        assert _resolve_date_expr("from {today-7d} to {today}") == "from 2026-09-02 to 2026-09-09"
+
+
+class TestSubstituteVarsExpr:
+    def test_simple_ref(self):
+        assert _substitute_vars_expr("{{days}}", {"days": "7"}) == "7"
+
+    def test_multiply(self):
+        assert _substitute_vars_expr("{{days*2}}", {"days": "7"}) == "14"
+
+    def test_add(self):
+        assert _substitute_vars_expr("{{days+3}}", {"days": "7"}) == "10"
+
+    def test_subtract(self):
+        assert _substitute_vars_expr("{{days-2}}", {"days": "7"}) == "5"
+
+    def test_in_date_expr(self):
+        result = _substitute_vars_expr("{today-{{days}}d}", {"days": "7"})
+        assert result == "{today-7d}"
+
+    def test_arithmetic_in_date_expr(self):
+        result = _substitute_vars_expr("{today-{{days*2}}d}", {"days": "7"})
+        assert result == "{today-14d}"
+
+
+class TestResolveVars:
+    @patch("dci_report_gen.config.date")
+    def test_full_pipeline(self, mock_date):
+        mock_date.today.return_value = date(2026, 9, 9)
+        mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
+        vars = {
+            "days": "7",
+            "date_end": "{today}",
+            "date_start": "{today-{{days}}d}",
+            "prev_start": "{today-{{days*2}}d}",
+        }
+        result = _resolve_vars(vars)
+        assert result["days"] == "7"
+        assert result["date_end"] == "2026-09-09"
+        assert result["date_start"] == "2026-09-02"
+        assert result["prev_start"] == "2026-08-26"
+
+    @patch("dci_report_gen.config.date")
+    def test_override_days(self, mock_date):
+        mock_date.today.return_value = date(2026, 9, 9)
+        mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
+        vars = {
+            "days": "5",
+            "date_end": "{today}",
+            "date_start": "{today-{{days}}d}",
+            "prev_start": "{today-{{days*2}}d}",
+        }
+        result = _resolve_vars(vars)
+        assert result["date_start"] == "2026-09-04"
+        assert result["prev_start"] == "2026-08-30"
+
+    def test_plain_vars_unchanged(self):
+        vars = {"date_start": "2024-06-01", "name": "test"}
+        result = _resolve_vars(vars)
+        assert result == {"date_start": "2024-06-01", "name": "test"}

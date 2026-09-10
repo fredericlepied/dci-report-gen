@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 import yaml
 
@@ -27,6 +27,8 @@ class SourceConfig:
     limit: int = 100
     sort: str = "-created_at"
     aggs: dict | None = None
+    aggs_raw: bool = False
+    transform: str | None = None
     jql: str | None = None
     max_results: int = 50
     repo: str | None = None
@@ -60,6 +62,88 @@ class ReportConfig:
     layout: str | None = None
     data: dict[str, SourceConfig] | None = None
     context: dict = field(default_factory=dict)
+
+
+def _resolve_date_expr(text: str) -> str:
+    """Resolve date expressions: {today}, {today-Nd}, {today+Nd}."""
+
+    def replacer(match: re.Match) -> str:
+        expr = match.group(1)
+        if expr == "today":
+            return date.today().isoformat()
+        m = re.match(r"today([+-])(\d+)d", expr)
+        if m:
+            sign = 1 if m.group(1) == "+" else -1
+            days = int(m.group(2))
+            return (date.today() + timedelta(days=sign * days)).isoformat()
+        raise ValueError(f"Unknown date expression: {{{expr}}}")
+
+    return re.sub(r"\{(today(?:[+-]\d+d)?)\}", replacer, text)
+
+
+def _substitute_vars_expr(text: str, vars: dict[str, str]) -> str:
+    """Substitute {{var}} and {{var*N}} / {{var+N}} / {{var-N}} expressions."""
+
+    def replacer(match: re.Match) -> str:
+        expr = match.group(1)
+        # Simple variable reference: {{var}}
+        m = re.match(r"^(\w+)$", expr)
+        if m:
+            key = m.group(1)
+            if key not in vars:
+                raise ValueError(f"Undefined variable: {{{{{key}}}}}")
+            return vars[key]
+        # Arithmetic: {{var*N}}, {{var+N}}, {{var-N}}
+        m = re.match(r"^(\w+)([*+\-])(\d+)$", expr)
+        if m:
+            key, op, operand = m.group(1), m.group(2), int(m.group(3))
+            if key not in vars:
+                raise ValueError(f"Undefined variable: {{{{{key}}}}}")
+            try:
+                val = int(vars[key])
+            except ValueError:
+                raise ValueError(
+                    f"Cannot apply arithmetic to non-integer var {{{{{key}}}}}={vars[key]}"
+                )
+            if op == "*":
+                return str(val * operand)
+            elif op == "+":
+                return str(val + operand)
+            else:
+                return str(val - operand)
+        raise ValueError(f"Invalid expression: {{{{{expr}}}}}")
+
+    return re.sub(r"\{\{(\w+(?:[*+\-]\d+)?)\}\}", replacer, text)
+
+
+def _resolve_vars(vars: dict[str, str]) -> dict[str, str]:
+    """Resolve inter-var references, arithmetic, and date expressions.
+
+    Processing order:
+    1. Collect literal vars (no {{}} references)
+    2. Resolve {{var}} and {{var*N}} references using literals
+    3. Resolve {today}, {today-Nd}, {today+Nd} date expressions
+    """
+    str_vars = {k: str(v) for k, v in vars.items()}
+
+    # Pass 1: collect literals (no {{}} references)
+    literals: dict[str, str] = {}
+    pending: dict[str, str] = {}
+    for key, value in str_vars.items():
+        if "{{" in value:
+            pending[key] = value
+        else:
+            literals[key] = value
+
+    # Pass 2: resolve {{var}} and {{var*N}} in pending vars using literals
+    resolved = dict(literals)
+    for key, value in pending.items():
+        resolved[key] = _substitute_vars_expr(value, resolved)
+
+    # Pass 3: resolve date expressions
+    resolved = {k: _resolve_date_expr(v) for k, v in resolved.items()}
+
+    return resolved
 
 
 def _substitute_vars(text: str, vars: dict[str, str]) -> str:
@@ -109,6 +193,8 @@ def _parse_source(raw: dict) -> SourceConfig:
         limit=int(raw.get("limit", 100)),
         sort=raw.get("sort", "-created_at"),
         aggs=raw.get("aggs"),
+        aggs_raw=bool(raw.get("aggs_raw", False)),
+        transform=raw.get("transform"),
         jql=raw.get("jql"),
         max_results=int(raw.get("max_results", 50)),
         repo=raw.get("repo"),
@@ -146,6 +232,7 @@ def load_config(
     vars = raw.get("vars", {})
     if var_overrides:
         vars.update(var_overrides)
+    vars = _resolve_vars(vars)
 
     context = raw.get("context", {})
 
